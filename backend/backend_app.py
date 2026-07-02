@@ -1,13 +1,15 @@
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import logging
 from typing import Union
 
 
 logging.basicConfig(filename='log_file.txt', level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
-
 app = Flask(__name__)
 CORS(app)  # This will enable CORS for all routes
+limiter = Limiter(app=app, key_func=get_remote_address)
 
 POSTS = [
     {"title": "First post", "content": "This is the first post."},
@@ -130,6 +132,7 @@ class Blog():
 
 my_blog = Blog("Master-Blog")
 @app.route('/api/posts', methods=['GET'])
+@limiter.limit("10/minute") #Max 4 requests / minute
 def get_posts():
     sort = request.args.get('sort',"")
     direction = request.args.get('direction',"")
@@ -139,9 +142,20 @@ def get_posts():
     #     abort(400, description="Wrong set of sorting parameters for sort and direction")
     if len(sort) == 0:
         app.logger.info(f'requesting list of available posts \n{my_blog}')
-        return jsonify(my_blog.serialize())
-    return my_blog.sort_posts(sort,direction)
+        return_list = my_blog.serialize()
+    else:
+        return_list = my_blog.sort_posts(sort,direction)
+    app.logger.info(f'Ensuring a fair traffic for the available posts: \n{return_list}')
 
+    try:
+        page = int(request.args.get('page', "1"))
+        limit = int(request.args.get('limit', "20"))
+        start= (page-1) * limit
+        end = int(limit) + start
+        set_of_posts = return_list[start:end]
+    except ValueError as e:
+        abort(400, description=f"Invalid values for page and limit, i.e. {page} and {limit}")
+    return jsonify(set_of_posts)
 
 @app.route('/api/posts/search', methods=['GET'])
 def search_posts()->list:
