@@ -1,0 +1,149 @@
+1. Problem description:
+A sorting function within class Blog with parameters sort(either title, or content) and direction(asc, or desc).
+The input is a list of posts: list[Post], where 'class Post' contains a dictionary with key's
+id, title and content.
+
+See also class Post and class
+
+2. The solution:
+class Blogs:
+    def __init__(self):
+        self.__posts: list[Post] = []
+
+    def sort_posts(self, sort: str, direction: str) -> list[dict]:
+        """
+        Sort the posts by title or content.
+
+        sort: "title" or "content"
+        direction: "asc" or "desc"
+        """
+
+        reverse = direction == "desc" #reverse either True or False
+
+        sorted_posts = sorted(
+            self.__posts,
+            key=lambda post: getattr(post, sort).lower(),
+            reverse=reverse
+        )
+
+        return [post.to_dict() for post in sorted_posts]
+
+3. Detailed explanation
+A. The magic occurs in this line of code
+        sorted_posts = sorted(
+            self.__posts,
+            key=lambda post: getattr(post, sort).lower(),
+            reverse=reverse
+        )
+We'll simplify it step by step.
+
+Step 1 - What is sorted()?
+Suppose you have:
+numbers = [5, 2, 8, 1]
+
+Then
+sorted(numbers) returns:
+[1, 2, 5, 8]
+
+Notice something important:
+sorted() does not change the original list.
+numbers  -> [5,2,8,1]
+sorted() -> [1,2,5,8]
+
+Step 2 - How does it sort?
+For numbers, Python knows what to compare.
+But for Post objects...
+Post
+Post
+Post
+
+Python asks "How am I supposed to compare these?" It has no idea.
+So we must tell it via the key=.
+
+Step 3 - The key=
+The key= parameter tells Python
+"For every object, which value should I use for comparing?"
+Imagine three Posts
+
+Post A             Post B            Post C
+title = Banana     title = Apple     title = Orange
+
+We say
+key=...
+and Python does:
+Post A -> Banana
+Post B -> Apple
+Post C -> Orange
+
+Then it sorts:
+Apple
+Banana
+Orange
+
+and finally returns:
+Post B
+Post A
+Post C
+
+Notice:
+It sorts the posts, not the titles. The titles are only used for comparison.
+
+Step 4 - The lambda
+This part:
+lambda post: getattr(post, sort).lower()
+
+is just a tiny function.
+
+It is exactly the same as writing
+def get_value(post):
+    return getattr(post, sort).lower()
+Then you could write
+sorted(
+    self.__posts,
+    key=get_value,
+    reverse=reverse
+)
+
+Those two short functions are identical. A lambda is simply a short function.
+
+Step 5 - Why getattr()?
+Suppose:
+sort = "title"
+
+Then
+getattr(post, sort)
+becomes
+getattr(post, "title")
+
+which returns
+post.title
+
+If
+sort = "content"
+
+then it becomes
+post.content
+
+So
+getattr(post, sort)
+is equivalent to saying
+"Give me whichever attribute the variable to sort with."
+
+Step 6 - Why .lower()?
+Because capital letters come before lowercase letters.
+
+Without .lower():
+Apple
+banana
+Orange
+
+would sort like:
+Apple
+Orange
+banana
+
+because capital letters come before lowercase letters.
+
+Using .lower() makes the comparison case-insensitive.
+
+
