@@ -1,19 +1,155 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
+import logging
+import uuid
+from typing import Union
+
+
+logging.basicConfig(filename='log_file.txt', level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S')
 
 app = Flask(__name__)
 CORS(app)  # This will enable CORS for all routes
 
 POSTS = [
-    {"id": 1, "title": "First post", "content": "This is the first post."},
-    {"id": 2, "title": "Second post", "content": "This is the second post."},
+    {"title": "First post", "content": "This is the first post."},
+    {"title": "Second post", "content": "This is the second post."},
 ]
 
+class Post():
+    max_id = 0
+    def __init__(self, posting:dict):
+        self.post_id = Post.max_id
+        self.title = posting.get("title")
+        self.content = posting.get("content")
+        if self.title is None or self.content is None:
+            abort(400, description="Data for adding new post is not sufficient. Must contain 'title' and 'content'")
+        Post.max_id += 1
 
+    def __str__(self):
+        return f"ID: {self.post_id}, Title: {self.title}, Content: {self.content}"
+
+    def __repr__(self):
+        app.logger.debug(f"ID: {self.post_id}, Title: {self.title}, Content: {self.content}")
+
+    def serialize(self)->dict:
+        a_dict = {}
+        a_dict['post_id'] = self.post_id
+        a_dict["title"] = self.title
+        a_dict["content"] = self.content
+        return a_dict
+
+class Blog():
+    def __init__(self, name:str):
+        self.posts = []
+        self.name = name
+
+    def __len__(self):
+        return len(self.posts)
+
+    def append(self, post: Post):
+        self.posts.append(post)
+
+    def __str__(self)->str:
+        blog_str = f"{self.name}: {len(self.posts)} posts. \nHere are the posts in the Blog\n"
+        for a_post in self.posts:
+            blog_str += f" - {a_post}\n"
+        return blog_str
+
+    def __repr__(self)->str:
+        app.logger.info(f'{my_blog}')
+
+    def serialize(self)->list:
+        return_list = []
+        for a_post in self.posts:
+            return_list.append(a_post.serialize())
+        return return_list
+
+    def get(self, post_id)->Union[tuple,None]:
+        for ind in range(len(self.posts)):
+            if self.posts[ind].post_id == post_id:
+                return ind, self.posts[ind]
+        return -1, None
+
+    def delete(self, index:int)->bool:
+        print(f"index={index}, len={len(self.posts)}")
+        if index <= len(self.posts) - 1:
+            if self.posts[index].post_id == Post.max_id-1:
+                Post.max_id -= 1
+            self.posts.pop(index)
+            return True
+        return False
+
+    def update(self, index:int, new_info:dict)->Post:
+        if len(new_info.get("title","")) != 0:
+            self.posts[index].title = new_info.get("title")
+        if len(new_info.get("content","")) != 0:
+            self.posts[index].content = new_info.get("content")
+        return self.posts[index]
+
+
+my_blog = Blog("Master-Blog")
 @app.route('/api/posts', methods=['GET'])
 def get_posts():
-    return jsonify(POSTS)
+    app.logger.info(f'requesting list of available posts \n{my_blog}')
+    return jsonify(my_blog.serialize())
 
+
+@app.route('/api/posts/<int:id>', methods=['DELETE'])
+def delete_posts(id):
+    app.logger.info(f'requesting to delete post \n{id}')
+    index, post_to_delete=my_blog.get(id)
+    if not post_to_delete:
+        abort(404, description=f"Post with id {id} does not exist")
+    if my_blog.delete(index):
+        return jsonify({"message": f"Post with id {id} has been deleted successfully"}), 200
+    abort(500, description=f"Internal server error: Post with index {index} could not be deleted")
+
+
+@app.route('/api/posts/<int:id>', methods=['PUT'])
+def update_posts(id):
+    update_info = request.get_json()
+    app.logger.info(f'requesting to update post \n{id} with data: {update_info}')
+    index, post_to_update=my_blog.get(id)
+    if not post_to_update:
+        abort(404, description=f"Post with id {id} does not exist")
+    updated_post = my_blog.update(index, update_info)
+    if updated_post:
+        return jsonify(updated_post.serialize()), 200
+    abort(500, description=f"Internal server error: Post with index {index} could not be deleted")
+
+
+@app.route('/api/posts', methods=['POST'])
+def add_post():
+    new_post = request.get_json()
+    app.logger.info(f'requesting addition of a new posts {new_post}')
+    if not new_post:
+        abort(400, description=r"Data for adding new post is not present: both 'title' and 'content' are missing")
+    if 'title' not in new_post:
+        abort(400, description=r"Data for adding new post is not present: 'title' is missing")
+    if 'content' not in new_post:
+        abort(400, description=r"Data for adding new post is not present: 'content' is missing")
+    new_post=Post(new_post)
+    my_blog.append(new_post)
+    print(new_post)
+    app.logger.info(f'Addition successful {new_post}')
+    return jsonify(new_post.serialize()), 201
 
 if __name__ == '__main__':
+    if len(my_blog) == 0:
+        for post in POSTS:
+            a_post = Post(post)
+            my_blog.append(a_post)
     app.run(host="0.0.0.0", port=5002, debug=True)
+
+@app.errorhandler(400)
+def bad_request(error):
+    app.logger.info(f'Unsuccessful request :{error.description}')
+    return jsonify({'error': 'Bad request', 'description': error.description, 'received_data': error.content}), 400
+@app.errorhandler(404)
+def not_found(error):
+    app.logger.info(f'Unsuccessful request :{error.description}')
+    return jsonify({'error': 'Not found'}), 404
+@app.errorhandler(500)
+def internal_error(error):
+    app.logger.info(f'Unsuccessful request :{error.description}')
+    return jsonify({'error': 'Bad request'}), 500

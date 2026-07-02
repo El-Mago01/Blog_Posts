@@ -9,6 +9,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 .idea/
+backend/log_file.txt
 .settings
 .guides/
 .codio
