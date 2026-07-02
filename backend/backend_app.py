@@ -1,7 +1,6 @@
 from flask import Flask, jsonify, request, abort
 from flask_cors import CORS
 import logging
-import uuid
 from typing import Union
 
 
@@ -86,12 +85,56 @@ class Blog():
             self.posts[index].content = new_info.get("content")
         return self.posts[index]
 
+    def search(self, search_term:dict)->list:
+        found_posts = []
+        skip_title = skip_content = False
+        if len(search_term.get("title","")) == 0:
+            skip_title = True
+        if len(search_term.get("content","")) == 0:
+            skip_content = True
+        if skip_title and skip_content:
+            return []
+        for s_post in self.posts:
+            if search_term["title"].lower() in s_post.title.lower() and not skip_title:
+                found_posts.append(s_post.serialize())
+                continue
+            if search_term["content"].lower() in s_post.content.lower() and not skip_content:
+                found_posts.append(s_post.serialize())
+        return found_posts
+
+    def sorted_posts(self, sort, direction):
+        if direction == "":
+            direction = "asc"
+        sorted_posts = sorted()
+
+
 
 my_blog = Blog("Master-Blog")
 @app.route('/api/posts', methods=['GET'])
 def get_posts():
-    app.logger.info(f'requesting list of available posts \n{my_blog}')
-    return jsonify(my_blog.serialize())
+    sort = request.args.get('sort',"")
+    direction = request.args.get('direction',False)
+    if sort not in ['title','content', ''] or direction not in ['asc','desc', '']:
+        abort(400, description="Wrong set of sorting parameters for sort and direction")
+    # if (len(sort)>0 and len(direction)==0) or (len(direction)>0 and len(sort) == 0):
+    #     abort(400, description="Wrong set of sorting parameters for sort and direction")
+    if len(sort) == 0:
+        app.logger.info(f'requesting list of available posts \n{my_blog}')
+        return jsonify(my_blog.serialize())
+    return my_blog.sorted_posts(sort,direction)
+
+
+@app.route('/api/posts/search', methods=['GET'])
+def search_posts()->list:
+    search_term = {}
+    search_term_title = request.args.get('title',"").strip('"')
+    search_term_content = request.args.get('content',"").strip('"')
+    app.logger.info(f'requesting a search with {search_term_title} {search_term_content}')
+    search_term["title"] = search_term_title
+    search_term["content"] = search_term_content
+    serialized_results = my_blog.search(search_term)
+    app.logger.info(f'will return the following matches\n{serialized_results}')
+    return jsonify(serialized_results)
 
 
 @app.route('/api/posts/<int:id>', methods=['DELETE'])
