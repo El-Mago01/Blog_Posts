@@ -12,4 +12,4 @@ The assignment contains the following elements:
 - pagination
 - Rate limiting
 - Flask Swagger
-
+- a large swagger.json (masterblog.json) file
